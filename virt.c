@@ -48,6 +48,8 @@ static int virt_init(void){
         virt_setup(&devices[i],i);
     }
     printk(KERN_ALERT "SETUP ALL DEVICES");
+    get_data(&devices[0],1);
+    printk(KERN_ALERT "Done retrieving");
     return 0;
 }
 
@@ -79,22 +81,22 @@ static void virt_exit(void){
 }
 
 // free the data in the quantum set
-void clean_device(){
-    int i;
-    // for(i=0;i<num_devices;i++){
-    //     struct virt_qset vr =  devices[i].data
-    //     while (vr != NULL)
-    //     {
-    //         kfree(vr.data);
-    //         vr = vr.next;
-    //     }
+// void clean_device(){
+//     int i;
+//     // for(i=0;i<num_devices;i++){
+//     //     struct virt_qset vr =  devices[i].data
+//     //     while (vr != NULL)
+//     //     {
+//     //         kfree(vr.data);
+//     //         vr = vr.next;
+//     //     }
         
-    // }
-}
+//     // }
+// }
 
 static int virt_open(struct inode *inode, struct file *filp){
     //find the opened device through container of
-    struct dev_opened = container_of(inode->i_cdev,struct virt_dev,cdev);
+    struct virt_dev *dev_opened = container_of(inode->i_cdev,struct virt_dev ,cdev);
     filp->private_data = dev_opened;
     /*
     Trim file do later
@@ -105,14 +107,15 @@ int virt_release(struct inode *inode, struct file *filp){
     return 0; // this is a virtual driver
 }
 
-virt_qset *get_data(struct virt_dev *dev,int n){
+struct virt_qset *get_data(struct virt_dev *dev,int n){
     return get_data_helper(dev->data,n);
+    
 }
-virt_qset *get_data_helper(struct virt_qset *q,int n){
+struct virt_qset *get_data_helper(struct virt_qset *q,int n){
     if(n < 0)return NULL;
     if(q == NULL){
         //create a new qset
-        q->data = kmalloc(sizeof(struct virt_qset),GFP_KERNEL);
+        q = kmalloc(sizeof(struct virt_qset),GFP_KERNEL);
         memset(q,0,sizeof(struct virt_qset));
         if(n == 0)return q;
         q->next = get_data_helper(q->next,n-1);
@@ -120,6 +123,7 @@ virt_qset *get_data_helper(struct virt_qset *q,int n){
         if(n == 0)return q;
         return get_data_helper(q->next,n-1);
     }
+    return NULL;
 }
 
 ssize_t virt_read(struct file *filp, char __user *buf, size_t count,loff_t *f_pos){
