@@ -19,7 +19,7 @@ ssize_t virt_write(struct file *filp, const char __user *buf, size_t count,loff_
 static void virt_setup(struct virt_dev *dev,int device_num);
 static int virt_open(struct inode *inode, struct file *filp);
 struct virt_qset *get_data(struct virt_dev *dev,int n);
-struct virt_qset *get_data_helper(struct virt_qset *q,int n);
+struct virt_qset *get_data_helper(struct virt_qset *q,int n,struct virt_qset *prev);
 int virt_release(struct inode *inode, struct file *filp);
 
 struct file_operations virt_fops = {    

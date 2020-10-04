@@ -22,6 +22,8 @@ int VIRT_QUANTUM = 4000;
 int majorNumber;
 int num_devices = 2;
 struct virt_dev *devices;
+int MAJOR_NUM = 0;
+int MINOR_NUM = 0;
 /*
 Todo - 
 implement data structures
@@ -30,8 +32,16 @@ implement open method
 
 static int virt_init(void){
     printk(KERN_ALERT "init!\n");
-    int start = alloc_chrdev_region(&dev,0,num_devices,"virt"); //allocate the driver
-    majorNumber = MAJOR(dev); // get a major number
+    //int start = alloc_chrdev_region(&dev,0,num_devices,"virt"); //allocate the driver
+    // if(scull_major) {
+	dev = MKDEV(MAJOR_NUM,MINOR_NUM);
+	int start = register_chrdev_region(dev, num_devices, "virt");
+	// } else {
+	// 	result = alloc_chrdev_region(&dev, scull_minor, scull_nr_devs,"scull" );
+	// 	scull_major = MAJOR(dev);
+	// }
+    //majorNumber = MAJOR(dev); // get a major number
+    //printk(KERN_ALERT "gghghhf "+ majorNumber);
     if(start < 0){
         printk(KERN_ALERT "FAIL");
     }else{
@@ -55,7 +65,8 @@ static int virt_init(void){
 
 static void virt_setup(struct virt_dev *dev,int device_num){
     //get the minor device number
-    int err,devNo = MKDEV(majorNumber,device_num);
+    int err,devNo = MKDEV(MAJOR_NUM,device_num);
+
     //Set the character driver up
     cdev_init(&dev->cdev,&virt_fops);
     dev->cdev.owner = THIS_MODULE;
@@ -108,31 +119,77 @@ int virt_release(struct inode *inode, struct file *filp){
 }
 
 struct virt_qset *get_data(struct virt_dev *dev,int n){
-    return get_data_helper(dev->data,n);
+    return get_data_helper(dev->data,n,NULL);
     
 }
-struct virt_qset *get_data_helper(struct virt_qset *q,int n){
+struct virt_qset *get_data_helper(struct virt_qset *q,int n,struct virt_qset *prev){
     if(n < 0)return NULL;
     if(q == NULL){
         //create a new qset
         q = kmalloc(sizeof(struct virt_qset),GFP_KERNEL);
         memset(q,0,sizeof(struct virt_qset));
+        if(prev != NULL && prev->next == NULL){
+            prev->next = q;
+        }
         if(n == 0)return q;
-        q->next = get_data_helper(q->next,n-1);
+        return get_data_helper(q->next,n-1,q);
     }else{
+        if(prev != NULL && prev->next == NULL){
+            prev->next = q;
+        }
         if(n == 0)return q;
-        return get_data_helper(q->next,n-1);
+        return get_data_helper(q->next,n-1,q);
     }
     return NULL;
 }
 
 ssize_t virt_read(struct file *filp, char __user *buf, size_t count,loff_t *f_pos){
+    struct virt_dev *device = filp->private_data;
     
-    //copy_to_user(buf,const void *from,count);
-    return 0;
+    if(device->size <= *f_pos)return -1;
+    if(device->size + count <= *f_pos){
+        count = *f_pos - device->size + count;
+    }
+    long quantum_area = (VIRT_Q_SET*VIRT_QUANTUM);
+    int dev_pos = (int)(*f_pos/quantum_area); // gets which device its in
+    int position_in_q_set = (int)(*f_pos % quantum_area) / VIRT_QUANTUM;
+    int position_in_quantum =  (int)(*f_pos % quantum_area) % VIRT_QUANTUM;
+    struct virt_qset *dataPtr = get_data(device,dev_pos);
+    if(dataPtr == NULL){
+        printk(KERN_ALERT "FAIL");
+        return -1;
+    }
+    copy_to_user(buf,dataPtr->data[position_in_q_set] + position_in_quantum ,count);
+    *f_pos+=count;
+
+    return count;
 }
 ssize_t virt_write(struct file *filp, const char __user *buf, size_t count,loff_t *f_pos){
-    return 0;
+    struct virt_dev *device = filp->private_data;
+    long quantum_area = (VIRT_Q_SET*VIRT_QUANTUM);
+    int dev_pos = (int)(*f_pos/quantum_area); // gets which device its in
+    int position_in_q_set = (int)(*f_pos % quantum_area) / VIRT_QUANTUM;
+    int position_in_quantum =  (int)(*f_pos % quantum_area) % VIRT_QUANTUM;
+    struct virt_qset *dataPtr = get_data(device,dev_pos);
+    if(dataPtr == NULL){
+        printk(KERN_ALERT "FAIL");
+        return -1;
+    }
+    /*If the quantum set was not initialized before */
+    if(!dataPtr->data){
+        dataPtr->data = kmalloc(quantum_area*sizeof(char *),GFP_KERNEL);
+        memset(dataPtr->data,0,quantum_area*sizeof(char *));
+    }
+    /*If the quantum set was not initilized before*/
+    if(!dataPtr->data[position_in_q_set]){
+        dataPtr->data[position_in_q_set] = kmalloc(VIRT_QUANTUM*sizeof(char *),GFP_KERNEL);
+    }
+    if(count > VIRT_QUANTUM -  position_in_quantum){
+        count =(VIRT_QUANTUM -  position_in_quantum);
+    }
+    copy_from_user(buf,dataPtr->data[position_in_q_set]+position_in_quantum,count);
+    *f_pos+=count;
+    return count;
 }
 
 module_init(virt_init);
