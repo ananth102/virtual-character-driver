@@ -18,7 +18,7 @@ MODULE_AUTHOR("Ananth Bashyam");
 
 dev_t dev;
 int VIRT_Q_SET = 1000;
-int VIRT_QUANTUM = 4000;
+int VIRT_QUANTUM = 40;
 int majorNumber;
 int num_devices = 2;
 struct virt_dev *devices;
@@ -58,7 +58,7 @@ static int virt_init(void){
         virt_setup(&devices[i],i);
     }
     printk(KERN_ALERT "SETUP ALL DEVICES");
-    get_data(&devices[0],1);
+    //get_data(&devices[0],1);
     printk(KERN_ALERT "Done retrieving");
     return 0;
 }
@@ -126,8 +126,10 @@ struct virt_qset *get_data_helper(struct virt_qset *q,int n,struct virt_qset *pr
     if(n < 0)return NULL;
     if(q == NULL){
         //create a new qset
+        printk("get method %d",n);
         q = kmalloc(sizeof(struct virt_qset),GFP_KERNEL);
         memset(q,0,sizeof(struct virt_qset));
+        printk("null test %d %d",!q,!q->data);
         if(prev != NULL && prev->next == NULL){
             prev->next = q;
         }
@@ -176,8 +178,12 @@ ssize_t virt_write(struct file *filp, const char __user *buf, size_t count,loff_
         return -1;
     }
     /*If the quantum set was not initialized before */
+    printk(KERN_ALERT "%d %d",dev_pos,quantum_area);
     if(!dataPtr->data){
         dataPtr->data = kmalloc(quantum_area*sizeof(char *),GFP_KERNEL);
+        if(!dataPtr->data){
+            printk(KERN_ALERT "memset fail");
+        }
         memset(dataPtr->data,0,quantum_area*sizeof(char *));
     }
     /*If the quantum set was not initilized before*/
@@ -187,8 +193,10 @@ ssize_t virt_write(struct file *filp, const char __user *buf, size_t count,loff_
     if(count > VIRT_QUANTUM -  position_in_quantum){
         count =(VIRT_QUANTUM -  position_in_quantum);
     }
-    copy_from_user(buf,dataPtr->data[position_in_q_set]+position_in_quantum,count);
+    copy_from_user(dataPtr->data[position_in_q_set]+position_in_quantum,buf,count);
     *f_pos+=count;
+    printk(KERN_ALERT "Wrote %d bytes",count);
+    printk("%c",*(char *)dataPtr->data[position_in_q_set]+position_in_quantum);
     return count;
 }
 
